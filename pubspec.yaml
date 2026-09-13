@@ -1,0 +1,44 @@
+name: flutter_movenet
+description: Cross-platform pose coaching app.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+workspace:
+  - packages/movenet_core
+  - packages/movenet_domain
+  - packages/movenet_data
+  - packages/feature_home
+  - packages/feature_camera
+  - packages/feature_video
+  - packages/feature_settings
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^3.3.2
+  go_router: ^18.0.1
+  feature_camera: ^1.0.0
+  feature_home: ^1.0.0
+  feature_settings: ^1.0.0
+  feature_video: ^1.0.0
+  movenet_core: ^1.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  melos: ^8.7.0
+
+flutter:
+  uses-material-design: true
+  config:
+    enable-swift-package-manager: false
+
+melos:
+  scripts:
+    analyze: dart run melos exec -- "flutter analyze"
+    test: dart run melos exec -c 1 --dir-exists=test -- "flutter test"
+    generate: dart run melos exec --depends-on=build_runner -- "dart run build_runner build"

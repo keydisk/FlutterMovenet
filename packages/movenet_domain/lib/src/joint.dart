@@ -1,0 +1,15 @@
+enum Joint {
+  nose,
+  leftShoulder,
+  rightShoulder,
+  leftElbow,
+  rightElbow,
+  leftWrist,
+  rightWrist,
+  leftHip,
+  rightHip,
+  leftKnee,
+  rightKnee,
+  leftAnkle,
+  rightAnkle,
+}

@@ -1,0 +1,13 @@
+name: feature_home
+version: 1.0.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  go_router: ^18.0.1
+  movenet_core: ^1.0.0

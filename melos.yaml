@@ -1,0 +1,9 @@
+name: flutter_movenet
+packages:
+  - .
+  - packages/**
+
+scripts:
+  analyze: melos exec -- "flutter analyze"
+  test: melos exec --dir-exists=test -- "flutter test"
+  generate: melos exec --depends-on=build_runner -- "dart run build_runner build"
