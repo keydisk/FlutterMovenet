@@ -15,6 +15,10 @@ dependencies:
   path_provider: ^2.1.5
   shared_preferences: ^2.5.4
 
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
 flutter:
   assets:
     - assets/kinetics_600_labels.json
