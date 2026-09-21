@@ -26,18 +26,77 @@ class VideoAnalysisScreen extends ConsumerWidget {
         loading: () =>
             const Center(child: CircularProgressIndicator(color: _accent)),
         error: (error, _) => _errorView(context, ref, error),
-        data: (value) => SafeArea(
-          child: Stack(
-            children: [
-              if (value.selectedPath == null)
-                _emptyState(context, ref, value)
-              else
-                _videoState(context, ref, value),
-              _topBar(context, ref, value),
-              if (value.isAnalyzing) _progressOverlay(value.progress),
-            ],
+        data: (value) => PopScope(
+          // 영상 화면에서 시스템 뒤로가기(Android 뒤로 버튼 등)는 화면을 닫지 않고 목록으로 돌아간다.
+          canPop: value.selectedPath == null,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) {
+              ref
+                  .read(videoAnalysisControllerProvider.notifier)
+                  .clearSelection();
+            }
+          },
+          child: SafeArea(
+            child: Stack(
+              children: [
+                _pageSwitcher(
+                  isVideo: value.selectedPath != null,
+                  page: value.selectedPath == null
+                      ? _emptyState(context, ref, value)
+                      : _videoState(context, ref, value),
+                ),
+                _topBar(context, ref, value),
+                if (value.isAnalyzing) _progressOverlay(value.progress),
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  // MARK: 목록 ↔ 영상 전환
+
+  static const _videoPageKey = ValueKey('video');
+
+  /// 목록 → 영상은 오른쪽에서 밀려 들어오고(push), 뒤로 가면 오른쪽으로 빠진다(pop).
+  /// 목록은 그 아래에서 살짝 왼쪽으로 밀리며 어두워져 iOS 내비게이션과 같은 느낌을 준다.
+  Widget _pageSwitcher({required bool isVideo, required Widget page}) {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 320),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      // 영상 페이지는 들어올 때도 나갈 때도 목록 위에 그려야 슬라이드가 보인다.
+      layoutBuilder: (current, previous) => Stack(
+        fit: StackFit.expand,
+        children: [
+          ...previous.where((child) => child.key != _videoPageKey),
+          ?current,
+          ...previous.where((child) => child.key == _videoPageKey),
+        ],
+      ),
+      transitionBuilder: (child, animation) => child.key == _videoPageKey
+          ? SlideTransition(
+              position: Tween(
+                begin: const Offset(1, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            )
+          : SlideTransition(
+              position: Tween(
+                begin: const Offset(-0.3, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: FadeTransition(
+                opacity: Tween(begin: 0.4, end: 1.0).animate(animation),
+                child: child,
+              ),
+            ),
+      child: KeyedSubtree(
+        key: isVideo ? _videoPageKey : const ValueKey('list'),
+        // 불투명 배경이 있어야 위에 겹친 페이지가 아래 페이지를 가린다.
+        child: ColoredBox(color: Colors.black, child: page),
       ),
     );
   }
@@ -261,28 +320,28 @@ class VideoAnalysisScreen extends ConsumerWidget {
 
   Widget _emptyHistory() => const Padding(
     padding: EdgeInsets.symmetric(vertical: 12),
-    child:
-    Center(child: Column(
-      children: [
-
-        Icon(Icons.history_toggle_off, size: 36, color: Colors.grey),
-        SizedBox(height: 12),
-        Text(
-          '저장된 분석 히스토리가 없습니다',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-            color: Colors.white70,
+    child: Center(
+      child: Column(
+        children: [
+          Icon(Icons.history_toggle_off, size: 36, color: Colors.grey),
+          SizedBox(height: 12),
+          Text(
+            '저장된 분석 히스토리가 없습니다',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+              color: Colors.white70,
+            ),
           ),
-        ),
-        SizedBox(height: 4),
-        Text(
-          "상단의 '앨범에서 새 영상 분석'을 눌러\n첫 번째 동영상 분석을 시작해보세요.",
-          textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12, color: Colors.grey),
-        ),
-      ],
-    ),)
+          SizedBox(height: 4),
+          Text(
+            "상단의 '앨범에서 새 영상 분석'을 눌러\n첫 번째 동영상 분석을 시작해보세요.",
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
+      ),
+    ),
   );
 
   void _showReport(BuildContext context, AnalysisRecord record) =>
