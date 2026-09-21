@@ -18,12 +18,26 @@ class AnalysisStorage {
         .toList();
   }
 
-  Future<void> prepend(AnalysisRecord record) async {
+  /// 새 기록을 맨 앞에 넣는다. 같은 id가 있으면 교체한다(재분석).
+  Future<void> save(AnalysisRecord record) async {
     final preferences = await SharedPreferences.getInstance();
     final values = preferences.getStringList(_key) ?? <String>[];
     await preferences.setStringList(
       _key,
-      [jsonEncode(record.toJson()), ...values].take(50).toList(),
+      [
+        jsonEncode(record.toJson()),
+        for (final value in values)
+          if ((jsonDecode(value) as Map)['id'] != record.id) value,
+      ].take(50).toList(),
     );
+  }
+
+  Future<void> remove(String id) async {
+    final preferences = await SharedPreferences.getInstance();
+    final values = preferences.getStringList(_key) ?? <String>[];
+    await preferences.setStringList(_key, [
+      for (final value in values)
+        if ((jsonDecode(value) as Map)['id'] != id) value,
+    ]);
   }
 }

@@ -14,4 +14,7 @@ dependencies:
   movenet_domain: ^1.0.0
   path_provider: ^2.1.5
   shared_preferences: ^2.5.4
-  video_thumbnail_plus: ^0.0.2
+
+flutter:
+  assets:
+    - assets/kinetics_600_labels.json
