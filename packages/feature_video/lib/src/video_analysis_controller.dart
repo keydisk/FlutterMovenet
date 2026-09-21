@@ -5,6 +5,7 @@ import 'package:movenet_data/movenet_data.dart';
 import 'package:movenet_domain/movenet_domain.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import 'pose_track.dart';
 import 'video_analysis_state.dart';
 
 part 'video_analysis_controller.g.dart';
@@ -14,6 +15,7 @@ class VideoAnalysisController extends _$VideoAnalysisController {
   final _history = AnalysisStorage();
   final _settings = SettingsStorage();
   final _storage = VideoStorage();
+  final _poseTracks = const PoseTrackStorage();
   final _analyzer = const FormAnalyzer();
   final _classifier = const ExerciseClassifier();
 
@@ -93,6 +95,9 @@ class VideoAnalysisController extends _$VideoAnalysisController {
         ),
       );
       await _history.save(record);
+      // 재생 중 관절·각도 오버레이용으로 프레임별 포즈를 영상 옆에 남긴다.
+      await _poseTracks.save(videoPath, frames);
+      ref.invalidate(poseTrackProvider(videoPath));
       final current = state.requireValue;
       state = AsyncData(
         current.copyWith(
@@ -130,6 +135,7 @@ class VideoAnalysisController extends _$VideoAnalysisController {
       ),
     );
     await _history.remove(record.id);
+    await _poseTracks.delete(record.videoPath);
     await _storage.delete(record.videoPath);
   }
 
@@ -139,8 +145,10 @@ class VideoAnalysisController extends _$VideoAnalysisController {
     state = AsyncData(
       current.copyWith(selectedPath: record.videoPath, latest: record),
     );
-    // 섬네일이 없는 예전 기록은 같은 영상으로 다시 분석해 채운다.
-    if (record.thumbnailPath == null && File(record.videoPath).existsSync()) {
+    // 섬네일·포즈 트랙이 없는 예전 기록은 같은 영상으로 다시 분석해 채운다.
+    if (File(record.videoPath).existsSync() &&
+        (record.thumbnailPath == null ||
+            !await _poseTracks.exists(record.videoPath))) {
       await reanalyze(record);
     }
   }
