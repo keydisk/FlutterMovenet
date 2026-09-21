@@ -141,16 +141,19 @@ class VideoAnalysisController extends _$VideoAnalysisController {
 
   /// 히스토리 항목을 선택해 영상과 리포트를 보여준다.
   Future<void> selectRecord(AnalysisRecord record) async {
-    final current = state.requireValue;
-    state = AsyncData(
-      current.copyWith(selectedPath: record.videoPath, latest: record),
-    );
     // 섬네일·포즈 트랙이 없는 예전 기록은 같은 영상으로 다시 분석해 채운다.
+    // 분석이 끝난 뒤에 영상을 띄운다: 분석이 같은 파일을 디코드하는 동안 플레이어를 열면
+    // 기기에서 플레이어가 멈춘 채로 남을 수 있다.
     if (File(record.videoPath).existsSync() &&
         (record.thumbnailPath == null ||
             !await _poseTracks.exists(record.videoPath))) {
       await reanalyze(record);
+      return;
     }
+    final current = state.requireValue;
+    state = AsyncData(
+      current.copyWith(selectedPath: record.videoPath, latest: record),
+    );
   }
 
   /// 선택을 해제해 목록 화면으로 돌아간다.

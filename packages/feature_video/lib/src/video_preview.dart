@@ -20,11 +20,12 @@ class VideoPreview extends ConsumerStatefulWidget {
 }
 
 class _VideoPreviewState extends ConsumerState<VideoPreview>
-    with SingleTickerProviderStateMixin {
-  late final VideoPlayerController _controller;
-  late final PoseOverlayDriver _driver;
+    with TickerProviderStateMixin {
+  late VideoPlayerController _controller;
+  late PoseOverlayDriver _driver;
   bool _wasPlaying = false;
   bool _wasAtEdge = true;
+  bool _hadError = false;
 
   /// 작은 화면에서는 하체·팔꿈치 각도만 붙여 숫자가 몰리지 않게 한다.
   static const _labels = {
@@ -39,31 +40,62 @@ class _VideoPreviewState extends ConsumerState<VideoPreview>
   @override
   void initState() {
     super.initState();
+    _open();
+  }
+
+  @override
+  void didUpdateWidget(VideoPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 다른 기록을 고르면 같은 State가 재사용되므로 플레이어를 새 영상으로 다시 연다.
+    if (oldWidget.path != widget.path) _reopen();
+  }
+
+  void _open() {
+    _wasPlaying = false;
+    _wasAtEdge = true;
+    _hadError = false;
     _controller = VideoPlayerController.file(File(widget.path))
-      ..initialize().then((_) => mounted ? setState(() {}) : null)
       ..addListener(_onVideo);
+    _controller.initialize().then(
+      (_) => mounted ? setState(() {}) : null,
+      // 실패는 value.hasError로 화면에 보여 준다.
+      onError: (Object _) => mounted ? setState(() {}) : null,
+    );
     _driver = PoseOverlayDriver(video: _controller, vsync: this);
   }
 
+  void _close() {
+    _driver.dispose();
+    _controller
+      ..removeListener(_onVideo)
+      ..dispose();
+  }
+
+  void _reopen() {
+    _close();
+    _open();
+    setState(() {});
+  }
+
   void _onVideo() {
-    // 재생 아이콘 표시 조건이 바뀔 때만 다시 그린다(위치 변화는 오버레이가 따로 그린다).
+    // 재생 아이콘 표시 조건·오류 상태가 바뀔 때만 다시 그린다(위치 변화는 오버레이가 따로 그린다).
     final value = _controller.value;
     final atEdge =
         value.position == Duration.zero || value.position >= value.duration;
-    if ((value.isPlaying, atEdge) != (_wasPlaying, _wasAtEdge) && mounted) {
+    if ((value.isPlaying, atEdge, value.hasError) !=
+            (_wasPlaying, _wasAtEdge, _hadError) &&
+        mounted) {
       setState(() {
         _wasPlaying = value.isPlaying;
         _wasAtEdge = atEdge;
+        _hadError = value.hasError;
       });
     }
   }
 
   @override
   void dispose() {
-    _driver.dispose();
-    _controller
-      ..removeListener(_onVideo)
-      ..dispose();
+    _close();
     super.dispose();
   }
 
@@ -81,6 +113,7 @@ class _VideoPreviewState extends ConsumerState<VideoPreview>
   @override
   Widget build(BuildContext context) {
     _driver.track = ref.watch(poseTrackProvider(widget.path)).value;
+    if (_controller.value.hasError) return _errorView();
     if (!_controller.value.isInitialized) {
       return const AspectRatio(
         aspectRatio: 16 / 9,
@@ -137,6 +170,25 @@ class _VideoPreviewState extends ConsumerState<VideoPreview>
       ),
     );
   }
+
+  Widget _errorView() => AspectRatio(
+    aspectRatio: 16 / 9,
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 32, color: Colors.grey),
+          const SizedBox(height: 8),
+          const Text(
+            '영상을 재생할 수 없어요.',
+            style: TextStyle(fontSize: 13, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(onPressed: _reopen, child: const Text('다시 불러오기')),
+        ],
+      ),
+    ),
+  );
 }
 
 /// 영상 위에 떠 있는 반투명 원형 버튼.
