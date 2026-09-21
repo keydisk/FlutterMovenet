@@ -105,15 +105,19 @@ class ReportCard extends StatelessWidget {
                   color: _warning,
                 ),
                 const SizedBox(width: 6),
-                const Text(
-                  '주의가 필요한 위험 각도',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: _warning,
+                const Expanded(
+                  child: Text(
+                    '주의가 필요한 위험 각도',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: _warning,
+                    ),
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 8),
                 _badge('${result.risks.length}건 감지', _warning),
               ],
             ),
@@ -255,15 +259,19 @@ class ReportCard extends StatelessWidget {
         children: [
           const Icon(Icons.help, size: 18, color: Colors.white),
           const SizedBox(width: 6),
-          const Text(
-            '감지된 운동 후보',
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+          const Expanded(
+            child: Text(
+              '감지된 운동 후보',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           analyzed,
         ],
       ),
@@ -303,15 +311,19 @@ class ReportCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Text(
-                candidate.label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              Expanded(
+                child: Text(
+                  candidate.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Text(
                 '${(candidate.confidence * 100).round()}%',
                 style: TextStyle(
@@ -417,15 +429,18 @@ class ReportCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      '${risk.degrees.round()}°',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                        color: color,
+                    Expanded(
+                      child: Text(
+                        '${risk.degrees.round()}°',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          color: color,
+                        ),
                       ),
                     ),
-                    const Spacer(),
                     Icon(
                       risk.critical
                           ? Icons.dangerous
@@ -472,11 +487,15 @@ class ReportCard extends StatelessWidget {
                       color: Colors.white.withValues(alpha: 0.6),
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      '눌러서 영상의 이 장면 보기',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.white.withValues(alpha: 0.6),
+                    Flexible(
+                      child: Text(
+                        '눌러서 영상의 이 장면 보기',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.6),
+                        ),
                       ),
                     ),
                   ],
