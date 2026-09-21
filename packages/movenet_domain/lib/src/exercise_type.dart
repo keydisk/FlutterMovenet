@@ -9,4 +9,7 @@ enum ExerciseType {
   const ExerciseType(this.label);
 
   final String label;
+
+  /// 반복 횟수를 세는 근력운동 여부.
+  bool get isRepExercise => this == squat || this == pullUp || this == pushUp;
 }

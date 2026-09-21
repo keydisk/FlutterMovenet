@@ -1,68 +1,268 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:movenet_domain/movenet_domain.dart';
 import 'package:video_player/video_player.dart';
 
-class VideoPreview extends StatefulWidget {
+import 'fullscreen_video_page.dart';
+import 'pose_overlay.dart';
+import 'pose_track.dart';
+import 'video_analysis_controller.dart';
+import 'video_seek.dart';
+
+/// 분석한 영상 재생 + MoveNet 관절·각도 오버레이. 오른쪽 아래 버튼으로 전체 화면을 연다.
+class VideoPreview extends ConsumerStatefulWidget {
   const VideoPreview({required this.path, super.key});
 
   final String path;
 
   @override
-  State<VideoPreview> createState() => _VideoPreviewState();
+  ConsumerState<VideoPreview> createState() => _VideoPreviewState();
 }
 
-class _VideoPreviewState extends State<VideoPreview> {
-  late final VideoPlayerController _controller;
+class _VideoPreviewState extends ConsumerState<VideoPreview>
+    with TickerProviderStateMixin {
+  late VideoPlayerController _controller;
+  late PoseOverlayDriver _driver;
+  bool _wasPlaying = false;
+  bool _wasAtEdge = true;
+  bool _hadError = false;
+
+  /// 지금 화면에 보이는 기록(이동 요청이 이 영상의 것인지 확인용).
+  AnalysisRecord? _latest;
+
+  /// 초기화 전에 들어온 이동 요청(초기화가 끝나면 적용).
+  Duration? _pendingSeek;
+
+  /// 작은 화면에서는 하체·팔꿈치 각도만 붙여 숫자가 몰리지 않게 한다.
+  static const _labels = {
+    RiskJoint.leftKnee,
+    RiskJoint.rightKnee,
+    RiskJoint.leftHip,
+    RiskJoint.rightHip,
+    RiskJoint.leftElbow,
+    RiskJoint.rightElbow,
+  };
 
   @override
   void initState() {
     super.initState();
+    _open();
+  }
+
+  @override
+  void didUpdateWidget(VideoPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 다른 기록을 고르면 같은 State가 재사용되므로 플레이어를 새 영상으로 다시 연다.
+    if (oldWidget.path != widget.path) _reopen();
+  }
+
+  void _open() {
+    _wasPlaying = false;
+    _wasAtEdge = true;
+    _hadError = false;
     _controller = VideoPlayerController.file(File(widget.path))
-      ..initialize().then((_) => mounted ? setState(() {}) : null);
+      ..addListener(_onVideo);
+    _controller.initialize().then(
+      (_) {
+        if (!mounted) return;
+        setState(() {});
+        if (_pendingSeek case final position?) {
+          _pendingSeek = null;
+          _seekTo(position);
+        }
+      },
+      // 실패는 value.hasError로 화면에 보여 준다.
+      onError: (Object _) => mounted ? setState(() {}) : null,
+    );
+    _driver = PoseOverlayDriver(video: _controller, vsync: this);
+  }
+
+  void _close() {
+    _driver.dispose();
+    _controller
+      ..removeListener(_onVideo)
+      ..dispose();
+  }
+
+  void _reopen() {
+    _close();
+    _open();
+    setState(() {});
+  }
+
+  void _onVideo() {
+    // 재생 아이콘 표시 조건·오류 상태가 바뀔 때만 다시 그린다(위치 변화는 오버레이가 따로 그린다).
+    final value = _controller.value;
+    final atEdge =
+        value.position == Duration.zero || value.position >= value.duration;
+    if ((value.isPlaying, atEdge, value.hasError) !=
+            (_wasPlaying, _wasAtEdge, _hadError) &&
+        mounted) {
+      setState(() {
+        _wasPlaying = value.isPlaying;
+        _wasAtEdge = atEdge;
+        _hadError = value.hasError;
+      });
+    }
+  }
+
+  /// 일시정지한 채로 [position]으로 옮긴다. 오버레이도 그 순간의 자세를 그린다.
+  Future<void> _seekTo(Duration position) async {
+    if (!_controller.value.isInitialized) {
+      _pendingSeek = position;
+      return;
+    }
+    await _controller.pause();
+    await _controller.seekTo(position);
+  }
+
+  /// 지금 보이는 영상의 분석 결과에서 온 요청만 따른다(다른 기록의 리포트 시트 등은 무시).
+  void _onSeekRequest(VideoSeekRequest? request) {
+    if (request == null) return;
+    final latest = _latest;
+    if (latest == null ||
+        latest.videoPath != widget.path ||
+        !identical(latest.result, request.result)) {
+      return;
+    }
+    _seekTo(request.position);
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _close();
     super.dispose();
   }
 
+  Future<void> _openFullscreen() => Navigator.of(context).push(
+    PageRouteBuilder<void>(
+      transitionDuration: const Duration(milliseconds: 200),
+      reverseTransitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (_, _, _) =>
+          FullscreenVideoPage(video: _controller, track: _driver.track),
+      transitionsBuilder: (_, animation, _, child) =>
+          FadeTransition(opacity: animation, child: child),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
+    _latest = ref.watch(
+      videoAnalysisControllerProvider.select((state) => state.value?.latest),
+    );
+    ref.listen(videoSeekProvider, (_, request) => _onSeekRequest(request));
+    _driver.track = ref.watch(poseTrackProvider(widget.path)).value;
+    if (_controller.value.hasError) return _errorView();
     if (!_controller.value.isInitialized) {
       return const AspectRatio(
         aspectRatio: 16 / 9,
         child: Center(child: CircularProgressIndicator()),
       );
     }
-    return Semantics(
-      button: true,
-      label: _controller.value.isPlaying ? '영상 일시정지' : '영상 재생',
-      child: GestureDetector(
-        onTap: () => setState(
-          () => _controller.value.isPlaying
-              ? _controller.pause()
-              : _controller.play(),
-        ),
-        child: AspectRatio(
-          aspectRatio: _controller.value.aspectRatio,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              VideoPlayer(_controller),
-              Center(
-                child: Icon(
-                  _controller.value.isPlaying
-                      ? Icons.pause_circle
-                      : Icons.play_circle,
-                  size: 56,
-                ),
-              ),
-            ],
+    final value = _controller.value;
+    final playing = value.isPlaying;
+    // 시작 전·끝난 뒤에만 가운데 재생 아이콘을 띄운다. 중간에 멈춘 자세는 가리지 않는다.
+    final showPlayIcon =
+        !playing &&
+        (value.position == Duration.zero || value.position >= value.duration);
+    return AspectRatio(
+      aspectRatio: _controller.value.aspectRatio,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Semantics(
+            button: true,
+            label: playing ? '영상 일시정지' : '영상 재생',
+            child: GestureDetector(
+              onTap: () => playing ? _controller.pause() : _controller.play(),
+              child: VideoPlayer(_controller),
+            ),
           ),
-        ),
+          IgnorePointer(
+            child: CustomPaint(
+              painter: PoseOverlayPainter(
+                _driver,
+                labels: _labels,
+                textStyle: DefaultTextStyle.of(context).style,
+              ),
+            ),
+          ),
+          IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: showPlayIcon ? 1 : 0,
+              duration: const Duration(milliseconds: 150),
+              child: const Center(
+                child: Icon(Icons.play_circle, size: 56, color: Colors.white70),
+              ),
+            ),
+          ),
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: OverlayIconButton(
+              icon: Icons.fullscreen,
+              label: '전체 화면으로 보기',
+              onTap: _openFullscreen,
+            ),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _errorView() => AspectRatio(
+    aspectRatio: 16 / 9,
+    child: Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline, size: 32, color: Colors.grey),
+          const SizedBox(height: 8),
+          const Text(
+            '영상을 재생할 수 없어요.',
+            style: TextStyle(fontSize: 13, color: Colors.white),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton(onPressed: _reopen, child: const Text('다시 불러오기')),
+        ],
+      ),
+    ),
+  );
+}
+
+/// 영상 위에 떠 있는 반투명 원형 버튼.
+class OverlayIconButton extends StatelessWidget {
+  const OverlayIconButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    super.key,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: label,
+    child: Semantics(
+      button: true,
+      label: label,
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.55),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: Icon(icon, size: 22, color: Colors.white),
+          ),
+        ),
+      ),
+    ),
+  );
 }
