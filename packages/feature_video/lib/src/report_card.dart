@@ -1,7 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:movenet_domain/movenet_domain.dart';
+
+import 'video_seek.dart';
 
 /// iOS 앱 RunningFormReportView와 같은 구성의 리포트 카드.
 /// 헤더(제목 + 유형 뱃지 + 분석 프레임 수) → 지표 그리드 → 위험 각도 → 코칭 피드백.
@@ -116,7 +119,7 @@ class ReportCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             for (final risk in result.risks) ...[
-              _riskCard(risk),
+              Builder(builder: (context) => _riskCard(context, risk)),
               const SizedBox(height: 8),
             ],
           ],
@@ -313,15 +316,34 @@ class ReportCard extends StatelessWidget {
   );
 
   /// iOS RiskAngleSnapshotCardView와 같은 구성(스냅샷 이미지는 없어 시각·경고 아이콘 박스로 대체).
-  Widget _riskCard(RiskEvent risk) {
+  /// 위험 카드를 누르면 영상을 일시정지한 채 그 순간으로 옮긴다(VideoPreview가 요청을 받는다).
+  void _seekTo(BuildContext context, RiskEvent risk) =>
+      ProviderScope.containerOf(
+        context,
+        listen: false,
+      ).read(videoSeekProvider.notifier).request(result, risk.timestamp);
+
+  Widget _riskCard(BuildContext context, RiskEvent risk) {
     final color = risk.critical ? _critical : _warning;
     final time = _timestamp(risk.timestamp);
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
+    return Semantics(
+      button: true,
+      label: '${risk.joint.label} $time 장면으로 이동',
+      child: Material(
         color: color.withValues(alpha: risk.critical ? 0.12 : 0.08),
         borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _seekTo(context, risk),
+          child: _riskCardBody(risk, color, time),
+        ),
       ),
+    );
+  }
+
+  Widget _riskCardBody(RiskEvent risk, Color color, String time) {
+    return Padding(
+      padding: const EdgeInsets.all(10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -430,6 +452,24 @@ class ReportCard extends StatelessWidget {
                     fontSize: 12,
                     color: Colors.white.withValues(alpha: 0.85),
                   ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.play_circle_outline,
+                      size: 13,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '눌러서 영상의 이 장면 보기',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.6),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
