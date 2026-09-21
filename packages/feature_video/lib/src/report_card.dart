@@ -193,13 +193,16 @@ class ReportCard extends StatelessWidget {
         ('고관절 각도', degrees(metrics?.hipFlexion), Icons.swap_horiz),
       ],
     };
-    return GridView.count(
-      crossAxisCount: 2,
+    return GridView(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10,
-      crossAxisSpacing: 10,
-      childAspectRatio: 2.7,
+      // 칸 높이를 폭 비율이 아닌 고정값으로 둬야 좁은 패널(가로 화면 오른쪽)에서도 넘치지 않는다.
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        mainAxisExtent: 58,
+      ),
       children: [
         for (final (title, value, icon) in cards)
           Container(
@@ -216,9 +219,16 @@ class ReportCard extends StatelessWidget {
                   children: [
                     Icon(icon, size: 11, color: Colors.grey),
                     const SizedBox(width: 4),
-                    Text(
-                      title,
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    Flexible(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                      ),
                     ),
                   ],
                 ),
