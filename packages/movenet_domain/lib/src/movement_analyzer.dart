@@ -1,59 +1,13 @@
 import 'dart:math' as math;
 
-import 'analysis_result.dart';
 import 'coaching_tip.dart';
 import 'exercise_type.dart';
 import 'joint.dart';
 import 'pose_frame.dart';
 import 'pose_point.dart';
-import 'rep_counter.dart';
-import 'running_metrics.dart';
 
 class MovementAnalyzer {
   const MovementAnalyzer();
-
-  AnalysisResult analyze(List<PoseFrame> frames, Duration duration) {
-    if (frames.isEmpty) {
-      return AnalysisResult(
-        exercise: ExerciseType.unknown,
-        probabilities: const {ExerciseType.unknown: 1},
-        repetitions: 0,
-        coaching: const [
-          CoachingTip(title: '전신 확인', message: '전신이 화면에 보이도록 촬영해 주세요.'),
-        ],
-        duration: duration,
-      );
-    }
-
-    final totals = <ExerciseType, double>{};
-    final counter = RepCounter();
-    for (final frame in frames) {
-      counter.add(frame);
-      for (final entry in classify(frame).entries) {
-        totals.update(
-          entry.key,
-          (value) => value + entry.value,
-          ifAbsent: () => entry.value,
-        );
-      }
-    }
-    final probabilities = _normalize(totals);
-    final exercise = probabilities.entries
-        .reduce((a, b) => a.value >= b.value ? a : b)
-        .key;
-    return AnalysisResult(
-      exercise: exercise,
-      probabilities: probabilities,
-      repetitions: counter.count(exercise),
-      coaching: coachingFor(exercise, frames.last),
-      duration: duration,
-      riskEvents: _riskEvents(exercise, frames),
-      runningMetrics:
-          exercise == ExerciseType.running || exercise == ExerciseType.walking
-          ? _runningMetrics(frames, duration)
-          : null,
-    );
-  }
 
   Map<ExerciseType, double> classify(PoseFrame frame) {
     final shoulder = _midpoint(frame, Joint.leftShoulder, Joint.rightShoulder);
@@ -198,121 +152,6 @@ class MovementAnalyzer {
     final b = frame.point(second);
     return a == null || b == null ? 0 : (a.y - b.y).abs();
   }
-
-  int _riskEvents(ExerciseType exercise, List<PoseFrame> frames) {
-    var count = 0;
-    var active = false;
-    for (final frame in frames) {
-      final risky = switch (exercise) {
-        ExerciseType.pullUp =>
-          _tilt(frame, Joint.leftShoulder, Joint.rightShoulder) > 0.07 ||
-              (_sideAngle(
-                            frame,
-                            Joint.leftShoulder,
-                            Joint.leftElbow,
-                            Joint.leftWrist,
-                          ) -
-                          _sideAngle(
-                            frame,
-                            Joint.rightShoulder,
-                            Joint.rightElbow,
-                            Joint.rightWrist,
-                          ))
-                      .abs() >
-                  28,
-        ExerciseType.squat =>
-          averageAngle(frame, const [
-                    (Joint.leftHip, Joint.leftKnee, Joint.leftAnkle),
-                    (Joint.rightHip, Joint.rightKnee, Joint.rightAnkle),
-                  ]) <
-                  65 ||
-              _tilt(frame, Joint.leftHip, Joint.rightHip) > 0.08,
-        ExerciseType.pushUp =>
-          _tilt(frame, Joint.leftShoulder, Joint.rightShoulder) > 0.07 ||
-              _tilt(frame, Joint.leftHip, Joint.rightHip) > 0.08,
-        _ => false,
-      };
-      if (risky && !active) count++;
-      active = risky;
-    }
-    return count;
-  }
-
-  RunningMetrics _runningMetrics(List<PoseFrame> frames, Duration duration) {
-    var steps = 0;
-    var leftLoaded = false;
-    var rightLoaded = false;
-    final trunkAngles = <double>[];
-    final kneeAngles = <double>[];
-    final hipAngles = <double>[];
-    for (final frame in frames) {
-      final leftKnee = _sideAngle(
-        frame,
-        Joint.leftHip,
-        Joint.leftKnee,
-        Joint.leftAnkle,
-      );
-      final rightKnee = _sideAngle(
-        frame,
-        Joint.rightHip,
-        Joint.rightKnee,
-        Joint.rightAnkle,
-      );
-      if (!leftLoaded && leftKnee < 145) {
-        leftLoaded = true;
-        steps++;
-      } else if (leftLoaded && leftKnee > 160) {
-        leftLoaded = false;
-      }
-      if (!rightLoaded && rightKnee < 145) {
-        rightLoaded = true;
-        steps++;
-      } else if (rightLoaded && rightKnee > 160) {
-        rightLoaded = false;
-      }
-      kneeAngles.add(math.min(leftKnee, rightKnee));
-      hipAngles.add(
-        averageAngle(frame, const [
-          (Joint.leftShoulder, Joint.leftHip, Joint.leftKnee),
-          (Joint.rightShoulder, Joint.rightHip, Joint.rightKnee),
-        ]),
-      );
-      final shoulder = _midpoint(
-        frame,
-        Joint.leftShoulder,
-        Joint.rightShoulder,
-      );
-      final hip = _midpoint(frame, Joint.leftHip, Joint.rightHip);
-      if (shoulder != null && hip != null) {
-        trunkAngles.add(
-          math.atan2((shoulder.x - hip.x).abs(), (shoulder.y - hip.y).abs()) *
-              180 /
-              math.pi,
-        );
-      }
-    }
-    final seconds = math.max(1, duration.inMilliseconds / 1000);
-    final hipRange = hipAngles.isEmpty
-        ? 0.0
-        : hipAngles.reduce(math.max) - hipAngles.reduce(math.min);
-    return RunningMetrics(
-      cadence: steps * 60 / seconds,
-      trunkLean: _average(trunkAngles),
-      kneeAngle: _average(kneeAngles),
-      hipMobility: hipRange,
-    );
-  }
-
-  static double _sideAngle(
-    PoseFrame frame,
-    Joint start,
-    Joint center,
-    Joint end,
-  ) => averageAngle(frame, [(start, center, end)]);
-
-  static double _average(List<double> values) => values.isEmpty
-      ? 0
-      : values.reduce((first, second) => first + second) / values.length;
 
   static Map<ExerciseType, double> _normalize(
     Map<ExerciseType, double> scores,
