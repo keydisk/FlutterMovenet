@@ -261,8 +261,10 @@ class VideoAnalysisScreen extends ConsumerWidget {
 
   Widget _emptyHistory() => const Padding(
     padding: EdgeInsets.symmetric(vertical: 12),
-    child: Column(
+    child:
+    Center(child: Column(
       children: [
+
         Icon(Icons.history_toggle_off, size: 36, color: Colors.grey),
         SizedBox(height: 12),
         Text(
@@ -280,7 +282,7 @@ class VideoAnalysisScreen extends ConsumerWidget {
           style: TextStyle(fontSize: 12, color: Colors.grey),
         ),
       ],
-    ),
+    ),)
   );
 
   void _showReport(BuildContext context, AnalysisRecord record) =>
