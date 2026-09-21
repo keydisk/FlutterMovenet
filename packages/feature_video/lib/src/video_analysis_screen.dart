@@ -113,22 +113,30 @@ class VideoAnalysisScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     VideoAnalysisState value,
-  ) => Padding(
-    padding: const EdgeInsets.only(top: 56),
-    child: Column(
+  ) {
+    // 가로 화면은 영상(왼쪽)과 리포트·히스토리(오른쪽)로 나눈다. 세로 화면은 위아래로 나눈다.
+    // 회전해도 위젯 구조를 같게 유지해야 VideoPreview 상태(재생 위치 등)가 초기화되지 않는다.
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    return Flex(
+      direction: landscape ? Axis.horizontal : Axis.vertical,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          // iOS는 화면을 영상/데이터 두 영역으로 나눈다. 세로 화면 기준 비율만 맞춘다.
-          height: MediaQuery.sizeOf(context).height * 0.42,
-          width: double.infinity,
-          child: ColoredBox(
-            color: Colors.black,
-            child: Center(child: VideoPreview(path: value.selectedPath!)),
+        Expanded(
+          flex: landscape ? 3 : 42,
+          child: Padding(
+            // 가로에서는 상단 바가 영상 위에 겹치도록 두어 세로 공간을 아낀다.
+            padding: EdgeInsets.only(top: landscape ? 0 : 56),
+            child: ColoredBox(
+              color: Colors.black,
+              child: Center(child: VideoPreview(path: value.selectedPath!)),
+            ),
           ),
         ),
         Expanded(
+          flex: landscape ? 2 : 58,
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(16, landscape ? 64 : 16, 16, 16),
             children: [
               if (value.latest case final record?)
                 ReportCard(result: record.result)
@@ -140,8 +148,8 @@ class VideoAnalysisScreen extends ConsumerWidget {
           ),
         ),
       ],
-    ),
-  );
+    );
+  }
 
   Widget _waitingView() => Container(
     width: double.infinity,
