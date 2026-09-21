@@ -52,6 +52,7 @@ class ReportCard extends StatelessWidget {
             _candidates(analyzed)
           else ...[
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
                   exerciseIcon(result.exercise),
@@ -59,33 +60,33 @@ class ReportCard extends StatelessWidget {
                   color: Colors.white,
                 ),
                 const SizedBox(width: 6),
+                // 제목은 자르지 않고, 폭이 모자라면 뱃지를 다음 줄로 내린다.
                 Expanded(
-                  child: Row(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Flexible(
-                        child: Text(
-                          _title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
+                      Text(
+                        _title,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: _badge(
-                          result.locomotionSummary ?? result.exercise.label,
-                          _accent,
-                        ),
+                      _badge(
+                        result.locomotionSummary ?? result.exercise.label,
+                        _accent,
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                analyzed,
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: analyzed,
+                ),
               ],
             ),
             const SizedBox(height: 12),
