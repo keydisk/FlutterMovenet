@@ -8,6 +8,8 @@ import 'package:video_player/video_player.dart';
 import 'fullscreen_video_page.dart';
 import 'pose_overlay.dart';
 import 'pose_track.dart';
+import 'video_analysis_controller.dart';
+import 'video_seek.dart';
 
 /// 분석한 영상 재생 + MoveNet 관절·각도 오버레이. 오른쪽 아래 버튼으로 전체 화면을 연다.
 class VideoPreview extends ConsumerStatefulWidget {
@@ -26,6 +28,12 @@ class _VideoPreviewState extends ConsumerState<VideoPreview>
   bool _wasPlaying = false;
   bool _wasAtEdge = true;
   bool _hadError = false;
+
+  /// 지금 화면에 보이는 기록(이동 요청이 이 영상의 것인지 확인용).
+  AnalysisRecord? _latest;
+
+  /// 초기화 전에 들어온 이동 요청(초기화가 끝나면 적용).
+  Duration? _pendingSeek;
 
   /// 작은 화면에서는 하체·팔꿈치 각도만 붙여 숫자가 몰리지 않게 한다.
   static const _labels = {
@@ -57,7 +65,14 @@ class _VideoPreviewState extends ConsumerState<VideoPreview>
     _controller = VideoPlayerController.file(File(widget.path))
       ..addListener(_onVideo);
     _controller.initialize().then(
-      (_) => mounted ? setState(() {}) : null,
+      (_) {
+        if (!mounted) return;
+        setState(() {});
+        if (_pendingSeek case final position?) {
+          _pendingSeek = null;
+          _seekTo(position);
+        }
+      },
       // 실패는 value.hasError로 화면에 보여 준다.
       onError: (Object _) => mounted ? setState(() {}) : null,
     );
@@ -93,6 +108,28 @@ class _VideoPreviewState extends ConsumerState<VideoPreview>
     }
   }
 
+  /// 일시정지한 채로 [position]으로 옮긴다. 오버레이도 그 순간의 자세를 그린다.
+  Future<void> _seekTo(Duration position) async {
+    if (!_controller.value.isInitialized) {
+      _pendingSeek = position;
+      return;
+    }
+    await _controller.pause();
+    await _controller.seekTo(position);
+  }
+
+  /// 지금 보이는 영상의 분석 결과에서 온 요청만 따른다(다른 기록의 리포트 시트 등은 무시).
+  void _onSeekRequest(VideoSeekRequest? request) {
+    if (request == null) return;
+    final latest = _latest;
+    if (latest == null ||
+        latest.videoPath != widget.path ||
+        !identical(latest.result, request.result)) {
+      return;
+    }
+    _seekTo(request.position);
+  }
+
   @override
   void dispose() {
     _close();
@@ -112,6 +149,10 @@ class _VideoPreviewState extends ConsumerState<VideoPreview>
 
   @override
   Widget build(BuildContext context) {
+    _latest = ref.watch(
+      videoAnalysisControllerProvider.select((state) => state.value?.latest),
+    );
+    ref.listen(videoSeekProvider, (_, request) => _onSeekRequest(request));
     _driver.track = ref.watch(poseTrackProvider(widget.path)).value;
     if (_controller.value.hasError) return _errorView();
     if (!_controller.value.isInitialized) {
