@@ -142,7 +142,7 @@ void main() {
     ('landscape', const Size(2556, 1179)),
     ('portrait', const Size(1179, 2556)),
   ]) {
-    testWidgets('전체 화면($name): 측면 설명 패널이 영상을 가리지 않는다', (tester) async {
+    testWidgets('전체 화면($name): 분석 패널을 영상 위에 겹쳐 띄운다', (tester) async {
       tester.view
         ..physicalSize = size
         ..devicePixelRatio = 3;
@@ -156,11 +156,28 @@ void main() {
         ),
       );
       await settle(tester);
-      expect(find.text('관절 각도'), findsOneWidget);
-      // 패널과 영상 영역이 겹치지 않는다.
-      final panel = tester.getRect(find.text('관절 각도'));
-      final stage = tester.getRect(find.byType(VideoPlayer));
-      expect(panel.left, greaterThanOrEqualTo(stage.right));
+      // 모서리 이동 애니메이션이 끝날 때까지.
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final screen = tester.getRect(find.byType(FullscreenVideoPage));
+      final panel = tester.getRect(find.byKey(FullscreenVideoPage.panelKey));
+      final videoRect = tester.getRect(find.byType(VideoPlayer));
+      if (name == 'landscape') {
+        // 영상은 왼쪽, 분석은 오른쪽.
+        expect(videoRect.left, screen.left);
+        expect(panel.right, screen.right);
+        expect(panel.left, greaterThan(videoRect.center.dx));
+      } else {
+        // 영상 위에 겹치되, 관절은 하나도 가리지 않는다.
+        expect(panel.overlaps(videoRect), isTrue);
+        final pose = _track.sample(Duration.zero)!;
+        for (final p in pose.points.values) {
+          final joint =
+              videoRect.topLeft +
+              Offset(p.x * videoRect.width, p.y * videoRect.height);
+          expect(panel.contains(joint), isFalse, reason: '$joint');
+        }
+      }
       await expectLater(
         find.byType(FullscreenVideoPage),
         matchesGoldenFile('goldens/fullscreen_$name.png'),
@@ -169,4 +186,31 @@ void main() {
       await tester.runAsync(video.dispose);
     }, skip: !File(_fontPath).existsSync());
   }
+
+  test('패널은 더 나은 자리가 잠깐 나타나는 것만으로는 움직이지 않는다', () {
+    final placer = PanelPlacer();
+    const area = Size(400, 800);
+    const panel = Size(160, 300);
+    Rect place(Rect person) => placer.place(
+      person: person,
+      area: area,
+      panel: panel,
+      bottomInset: 100,
+    );
+    // 처음에는 바로 사람과 겹치지 않는 자리에 둔다.
+    const onRight = Rect.fromLTRB(220, 0, 400, 400);
+    final first = place(onRight);
+    expect(first.overlaps(onRight), isFalse);
+    // 사람이 그쪽으로 옮겨 와도 즉시 따라 움직이지 않는다(대기).
+    const onLeft = Rect.fromLTRB(0, 0, 180, 400);
+    expect(place(onLeft), first);
+    expect(placer.waiting, isTrue);
+    final moved = placer.placeNow(
+      person: onLeft,
+      area: area,
+      panel: panel,
+      bottomInset: 100,
+    );
+    expect(moved.overlaps(onLeft), isFalse);
+  });
 }
