@@ -36,6 +36,83 @@ FlutterMovenet은 딥러닝 포즈 추정(Pose Estimation) 모델을 활용하�
 
 본 프로젝트는 **Melos** 기반의 모듈형 멀티 패키지(Workspace Monorepo) 구조로 구성되어 있습니다. 각 레이어와 기능이 명확한 책임을 가지며 패키지 단위로 격리되어 있습니다.
 
+### 🗺️ 프로젝트 구조도 (Architecture & Module Diagram)
+
+```mermaid
+flowchart TB
+    subgraph AppLayer["📱 App Entry & Presentation (lib/ & feature_*)"]
+        direction TB
+        App["lib/ (App Shell)<br/>• main.dart (ProviderScope)<br/>• app.dart (MaterialApp)<br/>• router.dart (GoRouter)"]
+        
+        subgraph Features["Feature Packages (packages/feature_*)"]
+            direction LR
+            F_Home["feature_home<br/>• 홈 대시보드<br/>• 운동 선택 런처"]
+            F_Camera["feature_camera<br/>• 실시간 카메라 피드<br/>• 스켈레톤 오버레이<br/>• 실시간 코칭 팁"]
+            F_Video["feature_video<br/>• 15fps 프레임 분석<br/>• 타임라인 탐색 및 스냅샷<br/>• 종합 분석 리포트"]
+            F_Settings["feature_settings<br/>• 카메라/FPS 설정<br/>• 신뢰도 임계값 조정"]
+        end
+        App --> Features
+    end
+
+    subgraph CoreLayer["🎨 Shared Core Layer (packages/movenet_core)"]
+        Core["movenet_core<br/>• MovenetTheme (Dark/Light)<br/>• SectionCard 및 공용 위젯<br/>• 테마 및 디자인 에셋"]
+    end
+
+    subgraph DomainLayer["🧠 Pure Dart Domain Layer (packages/movenet_domain)"]
+        direction TB
+        Classifier["ExerciseClassifier<br/>(운동 종목 자동 판별)"]
+        RepCounter["RepCounter<br/>(풀업·스쿼트·푸쉬업 반복 카운팅)"]
+        RiskDetector["RiskDetector<br/>(과신전·과굴곡 부상 위험 감지)"]
+        FormAnalyzer["FormAnalyzer<br/>(전신 폼 및 케이던스 통계 분석)"]
+        Models["Models & Entities<br/>(PoseFrame, Joint, CoachingTip)"]
+        Classifier ~~~ RepCounter ~~~ RiskDetector ~~~ FormAnalyzer ~~~ Models
+    end
+
+    subgraph DataLayer["💾 Data & Gateway Layer (packages/movenet_data)"]
+        direction TB
+        Reader["VideoAnalysisReader<br/>(MethodChannel 브릿지)"]
+        MLKit["PoseDetectorService<br/>(Google ML Kit Pose)"]
+        Storage["Storage Services<br/>(AnalysisStorage, VideoStorage)"]
+        Reader ~~~ MLKit ~~~ Storage
+    end
+
+    subgraph NativeLayer["⚡ Platform Native Acceleration Layer"]
+        direction LR
+        subgraph iOS["🍎 iOS Native (ios/Runner)"]
+            iOS_Dec["AVAssetReader (BGRA 디코딩)"]
+            iOS_ML["Core ML (MoveNet & MoViNet)"]
+            iOS_Ch["VideoAnalysisChannel (Swift)"]
+            iOS_Ch --> iOS_Dec
+            iOS_Ch --> iOS_ML
+        end
+        subgraph Android["🤖 Android Native (android/app)"]
+            And_Dec["MediaMetadataRetriever"]
+            And_ML["LiteRT(TFLite) & ONNX Runtime"]
+            And_Ch["MainActivity (Kotlin Channel)"]
+            And_Ch --> And_Dec
+            And_Ch --> And_ML
+        end
+    end
+
+    subgraph MLModelFiles["📦 ML Models (MLModels/)"]
+        M1["MoveNet MultiPose Lightning<br/>(.mlpackage / .tflite)"]
+        M2["MoViNet A0 Kinetics-600<br/>(.mlpackage / .onnx / .tflite)"]
+    end
+
+    %% Dependency & Interaction Links
+    Features --> Core
+    Features --> DataLayer
+    Features --> DomainLayer
+    DataLayer --> DomainLayer
+    DataLayer -. "MethodChannel: movenet/video_analysis" .-> NativeLayer
+    iOS_ML -. "Core ML 번들 로드" .-> MLModelFiles
+    And_ML -. "Asset 모델 로드" .-> MLModelFiles
+```
+
+---
+
+### 🌲 디렉토리 구조 (Directory Tree)
+
 ```text
 FlutterMovenet/
 ├── android/                         # Android 네이티브 소스
@@ -62,7 +139,7 @@ FlutterMovenet/
 └── analysis_options.yaml            # Dart 정적 분석 및 린트 룰셋
 ```
 
-### 패키지별 상세 역할
+### 📦 패키지별 상세 역할
 
 | 패키지 | 계층 | 의존성 | 주요 역할 |
 | --- | --- | --- | --- |
@@ -76,37 +153,14 @@ FlutterMovenet/
 
 ---
 
-## 🏛️ 소프트웨어 아키텍처
+## 🏛️ 소프트웨어 아키텍처 설계 원칙
 
-```mermaid
-graph TD
-  app[app<br/>메인 진입점 · GoRouter · 전역 테마] --> fh[feature_home]
-  app --> fc[feature_camera]
-  app --> fv[feature_video]
-  app --> fs[feature_settings]
-  
-  fc --> fs
-  fc --> data[movenet_data<br/>Platform Channel · ML Kit · SQLite/File Storage]
-  fv --> data
-  fs --> data
-  
-  fc --> domain[movenet_domain<br/>순수 Dart: 각도 계산 · RepCounter · RiskDetector]
-  fv --> domain
-  data --> domain
-  
-  fh --> core[movenet_core<br/>디자인 시스템 · 테마 · 공용 위젯]
-  fc --> core
-  fv --> core
-  fs --> core
-  
-  data -. MethodChannel<br/>(movenet/video_analysis) .-> native[iOS Swift / Android Kotlin<br/>하드웨어 디코딩 · Core ML · LiteRT · ONNX]
-```
-
-### 아키텍처 설계 원칙
+위 구조도에서 볼 수 있듯이, 본 애플리케이션은 다음과 같은 핵심 아키텍처 원칙을 준수합니다.
 
 1. **단방향 의존성 (`Feature → Data → Domain`)**: 도메인 계층은 외부 프레임워크나 플랫폼에 종속되지 않는 순수 Dart 라이브러리로 유지하여 유지보수성과 테스트 용이성을 극대화했습니다.
 2. **반응형 상태 관리**: Riverpod 3의 Code Generation 기반 `Notifier`와 Freezed 불변 객체를 결합하여 안정적이고 예측 가능한 상태 흐름을 구축했습니다.
 3. **하드웨어 인터페이스 캡슐화**: 카메라 하드웨어 스트림이나 플랫폼 채널은 `movenet_data` 계층 내부로 완전히 추상화되어 상위 UI 레이어는 데이터 소스의 물리적 구현을 신경 쓰지 않습니다.
+
 
 ---
 
